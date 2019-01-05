@@ -9,6 +9,7 @@ use App\Services\CalculatePointService;
 
 class CalculatePointServiceTest extends TestCase
 {
+
     /**
      * A basic test example.
      *
@@ -59,6 +60,34 @@ class CalculatePointServiceTest extends TestCase
     {
         $result = CalculatePointService::calcPoint($amount);
         $this->assertSame($expected, $result); 
+    }
+
+    /**
+     * @test
+     */
+    public function exception_try_catch()
+    {
+        try {
+            throw new \InvalidArgumentException('message', 200);
+            $this->fail(); // （1）例外がスローされない時はテストを失敗させる
+        } catch (\Throwable $e) {
+            // 指定した例外クラスがスローされているか
+            $this->assertInstanceOf(\InvalidArgumentException::class, $e);
+            // スローされた例外のコードを検証
+            $this->assertSame(200, $e->getCode());
+            // スローされた例外のメッセージを検証
+            $this->assertSame('message', $e->getMessage());
+        }
+    }
+
+    /**
+     * @test
+     * @expectedException \App\Exceptions\PreConditionException
+     * @expectedExceptionMessage 購入金額が負の数
+     */
+    public function calcPoint_購入金額が負の数なら例外をスロー()
+    {
+        CalculatePointService::calcPoint(-1);
     }
 
 }
