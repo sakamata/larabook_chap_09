@@ -37,7 +37,9 @@ Route::middleware(TeaPotMiddleware::class)->get('/live', function () {
 });
 
 Route::post('/send-email', function (Request $request, Mailer $mailer) {
+    // \App\Mail\SampleはMailableインターフェースを実装したクラス
     $mail = new \App\Mail\Sample();
+    // sendメソッドにMailableインターフェースを実装したクラスを指定
     $mailer->to($request->get('to'))->send($mail);
 
     return response()->json('ok');

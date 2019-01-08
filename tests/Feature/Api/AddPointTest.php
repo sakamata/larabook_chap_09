@@ -34,6 +34,7 @@ class AddPointTest extends TestCase
     /**
      * @test
      */
+    // 正常ケースのテスト
     public function put_add_point()
     {
         // (3) API実行

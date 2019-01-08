@@ -13,8 +13,9 @@ class PingTest extends TestCase
     public function get_ping()
     {
         $response = $this->get('/api/ping');
-
+        // HTTPステータスコードを検証
         $response->assertStatus(200);
-        $response->assertJson(['message' => 'pong']);
+        // レスポンスボディのJSONを検証
+        $response->assertExactJson(['message' => 'pong']);
     }
 }

@@ -16,11 +16,13 @@ class AuthTest extends TestCase
      */
     public function guard_api()
     {
+        // 認証ユーザーを事前に生成
         factory(User::class)->create([
             'name'      => 'Mike',
             'api_token' => 'token1'
         ]);
 
+        // 認証トークンをリクエストヘッダに設定して送信
         $response = $this->withHeaders([
             'Authorization' => 'Bearer token1'
         ])->getJson('/api/user');
@@ -36,12 +38,13 @@ class AuthTest extends TestCase
      */
     public function actingAsで認証ユーザ設定()
     {
+        // 認証ユーザーを事前に生成
         $user = factory(User::class)->create([
             'name'      => 'Mike',
             'api_token' => 'token1'
         ]);
 
-        // ミドルウェアを無効にして、認証ユーザを設定
+        // ミドルウェアを無効にして、actingAsメソッドに認証ユーザを設定
         $response = $this->withoutMiddleware()
             ->actingAs($user)
             ->getJson('/api/user');

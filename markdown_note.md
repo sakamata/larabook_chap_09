@@ -1168,19 +1168,835 @@ protected function setUp()
 <br>
 
 ## 9-3　WebAPIテスト
+**WebAPIを検証するテストコードの実装**
+
+ここではよりユニットテストより粒度の高い大きいフィーチャーテストの解説となる   
+LaravelではHTTPリクエストをシミュレートしてテストする機能が用意されている、この機能を利用した例の説明となる。   
 
 <br>
 
 ### 9-3-1　WebAPIテスト機能
 
+まず下記にあるような単純なAPIを扱う   
+`routes\api.php`抜粋
+```php
+Route::get('/ping', function () {
+    return response()->json(['message' => 'pong']);
+});
+```
+`/api/ping` にアクセスすると json [message => 'pong'] が得られるごく単純なAPIとなっている
+```
+$ curl  http://larabook.test/api/ping
+{"message":"pong"}
+```
+
+<br>
+
+#### テストクラスの生成
+
+テストクラスの生成は `artisan make:test`コマンドを使う。コマンドにクラス名指定で、 `test/Feature/` 以下にテストクラスファイルが生成される。 `--unit` オプションは使わないので注意
+
+9.3.1.3 フィーチャーテストクラスの生成例
+```
+$ php artisan make:test Api/PingTest
+Test created successfully.
+```
+
+生成されたファイル `tests\Feature\Api\PingTest.php`コマンドでパスを切った場合はディレクトリもよろしく作られる
+9.3.1.4 生成されたフィーチャーテストクラスの名前空間
+```php
+<?php
+// 名前空間の生成もフィーチャーテストとしてよろしくやってくれる
+namespace Tests\Feature\Api;
+
+use Tests\TestCase;
+use Illuminate\Foundation\Testing\WithFaker;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+
+// 省略
+```
+
+<br>
+
+#### HTTPリクエストの送信
+
+HTTPリクエストのテスト実施は、疑似的なHTTPリクエストを送信するメソッドを利用する。  `call`メソッドはHTTPリクエストを疑似的に送信してくれる。
+
+9.3.1.5 callメソッドの定義
+```php
+public function call {
+                        // 以下使用の際の引数の順序となっている?
+    $method,            // HTTPメソッド
+    $uri,               // URI
+    $parameters = [],   // 送信パラメータ
+    $cookies = [],      // cookie
+    $files = [],        // アップロードファイル
+    $server = [],       // サーバパラメータ
+    $content = null     // RAWリクエストボディ
+}
+```
+
+9.3.1.6 callメソッドの実行例
+```php
+// GETリクエスト クエリストリング
+$response = $this->call('GET', '/api/get?class=motogp&no=99');
+
+// GETリクエスト $parameters
+$response = $this->call('GET', '/api/get', [
+    'class' => 'motogp',
+    'no'    => '99'
+]);
+
+// POSTリクエスト
+$response = $this->call('POST', '/api/post', [
+    'email'    => 'a@example.com',
+    'password' => 'secret-password',
+]);
+```
+
+また、jsonの場合は以下の定義となる
+
+9.3.1.7 jsonメソッドの定義
+```php
+public function json($method, $uri, array $data = [], array $headers = [])
+```
+第3引数のリクエストヘッダは自動でも設定される   
+
+call,jsonメソッドにはHTTPメソッド毎のラッパー関数が用意されている。
+通常はラッパーメソッドを利用し、細かなパラメーター指定が必要な場合にcall,jsonメソッドを利用すると良い。   
+
+| メソッド | 送信する疑似HTTPリクエスト |
+| :-- | :-- |
+| get(\$uri, /$headers = []) | GETリクエスト |
+| getJson(\$uri, \$headers = []) | GETリクエスト(JSON) |
+| post(\$uri, \$data, \$headers = []) | POSTリクエスト |
+| postJson(\$uri, \$data, \$headers = []) | POSTリクエスト(JSON) |
+| put(\$uri, \$data, \$headers = []) | PUTリクエスト |
+| putJson(\$uri, \$data, \$headers = []) | PUTリクエスト(JSON) |
+| patch(\$uri, \$data, \$headers = []) | PATCHリクエスト |
+| patchJson(\$uri, \$data, \$headers = []) | PATCHリクエスト(JSON) |
+| delete(\$uri, \$data, \$headers = []) | DELETEリクエスト |
+| deleteJson(\$uri, \$data, \$headers = []) | DELETEリクエスト(JSON) |
+
+<br>
+
+#### HTTPレスポンスのアサーション
+
+送信したHTTPリクエストの結果検証をするアサーションメソッドがある。
+Tests\TestCaseクラスにもあるが、
+Illuminate\Foundation\Testing\TestResponceクラスの方が特化したアサーションの記述が容易なので作者はこちらを薦めている。
+
+Illuminate\Foundation\Testing\TestResponceクラスの主なアサーションメソッドは以下
+9.3.1.10 レスポンスをアサーションする主なメソッド(抜粋)   
+
+| メソッド | 内容 |
+| :-- | :-- |
+| assertStatus(\$status) | HTTPステータスコードが引数と一致していれば成功 |
+| assertSuccessful() | HTTPステータスコードが2XXなら成功 |
+| assertRedirect(\$url = null) | 次のいずれか 201,301,302,303,307,308 かつ、ヘッダのuriの値が app('uri)->to(\$uri) の値と一致すれば成功 |
+| assertHeader(\$headerName, \$value = null) | レスポンスヘッダが存在(\$valueがnullの場合）もしくは該当ヘッダの値が$valueと一致すれば成功) |
+| assertExactJson(array \$data, \$strict = false) | レスポンスボディのJSONをデコードした配列が$dataと一致すれば成功 |
+| assertJson(array \$data, \$strict = false) | レスポンスボディのJSONをデコードした配列に$dataが含まれていれば成功 |
+
+以上を反映した`/api/ping`のAPIテストの例は以下の通り   
+
+9.3.1.11 ping APIのテストクラス
+```php
+<?php
+declare(strict_types=1);
+
+namespace Tests\Feature\Api;
+
+use Tests\TestCase;
+
+class PingTest extends TestCase
+{
+    /**
+     * @test
+     */
+    public function get_ping()
+    {
+        $response = $this->get('/api/ping');
+        // HTTPステータスコードを検証
+        $response->assertStatus(200);
+        // レスポンスボディのJSONを検証
+        $response->assertExactJson(['message' => 'pong']);
+    }
+}
+```
+
+テストしてみる
+```
+$ ./vendor/bin/phpunit tests/Feature/Api/PingTest.php
+PHPUnit 6.5.9 by Sebastian Bergmann and contributors.
+
+.                                                                   1 / 1 (100%)
+
+Time: 1.26 seconds, Memory: 12.00MB
+
+OK (1 test, 2 assertions)
+```
+
+このようにWebAPIのテストでは疑似的なリクエスト送信をしてレスポンスが検証可能となっている。   
+
 <br>
 
 ### 9-3-2　テスト対象のAPI
+
+9-2 で行った「データベーステスト」のポイント加算処理を利用して、ポイント加算を行うWebAPIのテストを通じてフィーチャテストの解説。   
+
+**WebAPIの概要**   
+リクエストJSONに含まれるcustomer_idに該当する顧客に対して add_point で指定したポイントを加算する   
+
+9.3.2.2 ポイント加算APIのクラス構成（左下4クラスはDBテストで使用したもの）
+@startuml
+    AddPointAction ..> AddPointUseCase
+    AddPointUseCase ..> AddPointService
+    AddPointService ..> PointEvent
+    AddPointService ..> EloquentCustomerPointEvent
+    AddPointService ..> EloquentCustomerPoint
+    EloquentCustomerPointEvent ..> PointEvent
+    AddPointUseCase ..> EloquentCustomerPoint
+    AddPointUseCase ..> EloquentCustomer
+
+    AddPointAction : __invoke(AddPointRequest $request)
+    AddPointUseCase : run(int $customerid, int $addPoint, string $event, Carbon $now)
+    AddPointService : add(PointEvent $pointEvent)
+    EloquentCustomerPointEvent : register(PointEvent $e)
+    EloquentCustomerPoint : addPoint(int $customerid, int $addPoint)
+@enduml
+
+各クラスの概要説明、ソースコードは**クラス名のリンク**をクリックで閲覧可能
+
+[**AddPointActionクラス**](https://github.com/laravel-socym/chapter09/blob/master/app/Http/Actions/AddPointAction.php)
+`app\Http\Actions\AddPointAction.php`
+HTTPに関する処理とユースケースの実行を担う   
+API処理の親ファイル バリデートを __invoke の引数にフォームリクエストを入れる事で行う。また、 AddPointUseCaseクラスをコンストラクトインジェクションして処理を引っ張ってきてる
+
+
+[**AddPointRequestクラス**](https://github.com/laravel-socym/chapter09/blob/master/app/Http/Requests/AddPointRequest.php)
+`app\Http\Requests\AddPointRequest.php`
+要はバリデートの為のフォームリクエストファイル
+`customer_id` と `add_point` を `'required|int'` のバリデートをしている
+
+
+9.3.2.5 ルーティングの追加(routes/api.php)
+```php
+// 追加
+use App\Http\Actions\AddPointAction;
+// 中略
+Route::put('/customers/add_point', AddPointAction::class);
+```
+AddPointActionクラスはのメソッドは `__invoke` しているので、クラス名のみの指定となっている
+
+コントローラーやアクションクラスは標準設定だと `App\Http\Controller`以下に置くことが必要だが、以下の設定を変更することでカスタマイズできる。   
+
+9.3.2.6 app\Providers\RouteServiceProvider の設定変更
+```php
+// before
+// protected $namespace = 'App\Http\Controllers';
+
+// after
+protected $namespace = ''; // 空文字にする
+```
+
+[**AddPointUseCaseクラス**](https://github.com/laravel-socym/chapter09/blob/master/app/UseCases/AddPointUseCase.php)
+`app\UseCases\AddPointUseCase.php`
+
+配下の`AddPointService`, `EloquentCustomer`, `EloquentCustomerPoint`をコンストラクタインジェクションする。   
+`run`メソッドで カスタマーの情報`(\$customerId, \$pointEvent, \$addPoint, \$now)`を引数に、ポイント加算処理を走らせ、返り値として保有した`cuntomer_point`tableの`point`を返す。   
+
+[**PreConditionException**](https://github.com/laravel-socym/chapter09/blob/master/app/Exceptions/PreConditionException.php)
+
+検証に失敗した際は、`app\Exceptions\PreConditionException`にtrow そちらに処理は書かれてないが、下記の`app\Exceptions\Handler`側で`PreConditionException`が例外instanceされた際ステータス400とエラーメッセージを出力させる。   
+
+[**app\Exceptions\Handler**](https://github.com/laravel-socym/chapter09/blob/master/app/Exceptions/Handler.php)
+
+9.3.2.9 app\Exceptions\Handlerクラスによるエラーレスポンスの設定(抜粋)
+```php
+    /**
+     * Render an exception into an HTTP response.
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @param  \Exception  $exception
+     * @return \Illuminate\Http\Response
+     */
+    public function render($request, Exception $exception)
+    {
+        if ($exception instanceof PreConditionException) {
+            return response()->json(['message' => trans($exception->getMessage())], Res::HTTP_BAD_REQUEST);
+        }
+
+        return parent::render($request, $exception);
+    }
+```
+
+では以上のAPIを実際に使用してみる。
+`http://larabook.test/api/customers/add_point`にcostomer_id = 1 が 10point Addするcurlコマンドを叩く
+
+```
+$ curl -v -H "Accept: application/json" -H "Content-type: application/json" -X PUT -d \
+'{"customer_id":1,"add_point":10}' http://larabook.test/api/customers/add_point -w "\n"
+```
+
+9.3.2.10 curlコマンドによる実行例
+```
+vagrant@homestead:~/lalabook/chapter09$ curl -v -H "Accept: application/json" \
+-H "Content-type: application/json" -X PUT -d \
+'{"customer_id":1,"add_point":10}' \
+ http://larabook.test/api/customers/add_point -w "\n"
+*   Trying 192.168.10.10...
+* TCP_NODELAY set
+* Connected to larabook.test (192.168.10.10) port 80 (#0)
+> PUT /api/customers/add_point HTTP/1.1
+> Host: larabook.test
+> User-Agent: curl/7.58.0
+> Accept: application/json
+> Content-type: application/json
+> Content-Length: 32
+>
+* upload completely sent off: 32 out of 32 bytes
+< HTTP/1.1 200 OK
+< Server: nginx/1.14.0 (Ubuntu)
+< Content-Type: application/json
+< Transfer-Encoding: chunked
+< Connection: keep-alive
+< Cache-Control: no-cache, private
+< Date: Tue, 08 Jan 2019 09:00:50 GMT
+< X-RateLimit-Limit: 60
+< X-RateLimit-Remaining: 59
+<
+* Connection #0 to host larabook.test left intact
+{"customer_point":110}
+```
+ステータスは`HTTP/1.1 200 OK`となる。最後の行に`customer_point`が110に増加したjsonが返ってきているのが確認できる   
+当然だが同じコマンドを叩く都度DBが更新され、`customer_point`が10増加する   
+
+次にエラーとなる値で確認 add_point = 0 でPUTしてみる
+```
+vagrant@homestead:~/lalabook/chapter09$ curl -v -H "Accept: application/json" -H "Content-type: application/json" -X PUT -d '{"customer_id":1,"add_point":0}' http://larabook.test/api/customers/add_point -w "\n"
+*   Trying 192.168.10.10...
+* TCP_NODELAY set
+* Connected to larabook.test (192.168.10.10) port 80 (#0)
+> PUT /api/customers/add_point HTTP/1.1
+> Host: larabook.test
+> User-Agent: curl/7.58.0
+> Accept: application/json
+> Content-type: application/json
+> Content-Length: 31
+>
+* upload completely sent off: 31 out of 31 bytes
+< HTTP/1.1 400 Bad Request
+< Server: nginx/1.14.0 (Ubuntu)
+< Content-Type: application/json
+< Transfer-Encoding: chunked
+< Connection: keep-alive
+< Cache-Control: no-cache, private
+< Date: Tue, 08 Jan 2019 09:15:55 GMT
+< X-RateLimit-Limit: 60
+< X-RateLimit-Remaining: 59
+<
+* Connection #0 to host larabook.test left intact
+{"message":"add_point should be equals or greater than 1"}
+```
+ステータスが`HTTP/1.1 400 Bad Request`となって、最後の行にエラーメッセージが返信されてきているのが確認できる。   
 
 <br>
 
 ### 9-3-3　APIテストの実装
 
+テストでは状況別で以下の４つのケースを実装する   
+
+- ポイント加算が正常完了する
+- バリテーションエラーになる
+- add_pointが事前条件エラーになる
+- customer_idが事前条件エラーになる
+
+以下のクラスにテストを実装してゆく   
+`tests\Feature\Api\AddPointTest`
+
+9.3.3.1 tests\Feature\Api\AddPointTestクラス（準備部分を抜粋）
+```php
+<?php
+declare(strict_types=1);
+
+namespace Tests\Feature\Api;
+
+use App\Eloquent\EloquentCustomer;
+use App\Eloquent\EloquentCustomerPoint;
+use Carbon\Carbon;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class AddPointTest extends TestCase
+{
+    use RefreshDatabase; // <---(1)
+
+    const CUSTOMER_ID = 1;
+
+    protected function setUp()
+    {
+        parent::setUp();
+        //(1-2)
+        Carbon::setTestNow();
+
+        // (2) テストに必要なレコードを登録
+        factory(EloquentCustomer::class)->create([
+            'id' => self::CUSTOMER_ID,
+        ]);
+        factory(EloquentCustomerPoint::class)->create([
+            'customer_id' => self::CUSTOMER_ID,
+            'point'       => 100,
+        ]);
+    }
+
+    // 以下にテストを追加して行く
+
+}
+```
+(1) DBを利用しているので `use RefreshDatabase;` をしている   
+(1-2)`Carbon::setTestNow();`テスト用の日時を生成している   
+[PHPで日付時刻の処理を書くなら Carbon がおすすめ](http://blog.asial.co.jp/1392) より引用
+> setTestNow() はCarbonが基準とする現在の日時をモックで設定できる機能です。つまりロジック内でCarbonを適切に扱うことで時間に関するテストをユニットテストでも書けるようになります。   
+
+(2)テストに必要な値は9.2.2.7同様 factoryを使用して準備する。
+
+
+#### 正常ケース
+
+APIで100point保持の会員に10point追加した際の動作を確認するシナリオ。   
+ここまでくると、だいたいパッと見て何やってるか判断できる位にはなりたい所。   
+
+9.3.3.1 tests\Feature\Api\AddPointTestクラス（正常ケースのテスト部分を抜粋）
+```php
+    /**
+     * @test
+     */
+    // 正常ケースのテスト
+    public function put_add_point()
+    {
+        // (3) API実行
+        $response = $this->putJson('/api/customers/add_point', [
+            'customer_id' => self::CUSTOMER_ID,
+            'add_point'   => 10,
+        ]);
+
+        // (4) HTTPレスポンスアサーション
+        $response->assertStatus(200);
+        $expected = ['customer_point' => 110];
+        $response->assertExactJson($expected);
+
+        // (5) データベースアサーション
+        $this->assertDatabaseHas('customer_points', [
+            'customer_id' => self::CUSTOMER_ID,
+            'point'       => 110,
+        ]);
+        $this->assertDatabaseHas('customer_point_events', [
+            'customer_id' => self::CUSTOMER_ID,
+            'event'       => 'ADD_POINT',
+            'point'       => 10,
+            'created_at'  => Carbon::now(),
+        ]);
+    }
+```
+
+<br>
+
+#### バリテーションエラーとなるケース
+
+9.3.3.2 バリテーションエラーのテストメソッド
+```php
+    /**
+     * @test
+     */
+    public function put_add_point_バリデーションエラー()
+    {
+        // (2) API実行 パラメーター無しでアクセスしてる
+        $response = $this->putJson('/api/customers/add_point', [
+        ]);
+
+        // (3) HTTPレスポンスアサーション
+        $response->assertStatus(422);
+        $expected = [
+            'message' => 'The given data was invalid.',
+            'errors'  => [
+                'customer_id' => [
+                    'The customer id field is required.',
+                ],
+                'add_point'   => [
+                    'The add point field is required.',
+                ],
+            ],
+        ];
+        $response->assertExactJson($expected);
+    }
+```
+(3) responce 422 はLaravelのバリテーションエラーのステータスコードとなっている。
+`assertExactJson`メソッドで期待値と一致するかを検証）でエラーメッセージの検証をしているが、レスポンスボティ全体を検証できるメリットと、テストメソッドの可読性を上げることができる為に利用している。   
+
+逆にランダムな値を含み、全体一致が難しい値等の検証は。`assertJson`メソッド(配列で指定した値が含まれているか検証)を使う   
+
+9.3.3.3 assertJsonメソッドでレスポンスJSONの一部を検証
+```php
+    /**
+     * @test
+     */
+    public function put_add_point_バリデーションエラー_errorsのみ検証()
+    {
+        $response = $this->putJson('/api/customers/add_point', [
+        ]);
+
+        $response->assertStatus(422);
+
+        // errorsキーのみ検証
+        $expected = [
+            'errors' => [
+                'customer_id' => [
+                    'The customer id field is required.',
+                ],
+                'add_point'   => [
+                    'The add point field is required.',
+                ],
+            ],
+        ];
+        $response->assertJson($expected);
+    }
+```
+
+また、JSONで帰って来た値の中に検証すべきメッセージが存在するかを確認したい場合、レスポンスのJSONを配列に変換して、key別に検証する以下の方法もある   
+便利な方法なので覚えておくと良い   
+
+9.3.3.4 レスポンスボディのJSONを配列に変換して検証
+```php
+    /**
+     * @test
+     */
+    public function put_add_point_バリデーションエラー_キーのみ検証()
+    {
+        $response = $this->putJson('/api/customers/add_point', [
+        ]);
+
+        $response->assertStatus(422);
+
+        // レスポンスボディJSONを配列に変換して検証
+        $jsonValues = $response->json();
+
+        $this->assertArrayHasKey('errors', $jsonValues);
+
+        $errors = $jsonValues['errors'];
+        $this->assertArrayHasKey('customer_id', $errors);
+        $this->assertArrayHasKey('add_point', $errors);
+    }
+```
+
+<br>
+
+#### add_pointが事前条件エラーとなるケース
+
+add_pointが**0かマイナス値**の場合正常なエラーメッセージが返るかを検証するテストメソッド   
+9-1-4 データプロバイダを使っている（配列で検証する値を複数用意して @dataProvider アノテーションで宣言《コメントにメソッド指定》）
+
+復習: @dataProvider アノテーション 一見コメントだが、このメソッドの配列を使ってテストしろって指示出来る奴
+```php
+    /**
+     * @test
+     * @dataProvider dataProvider_put_add_point_add_point事前条件エラー
+     */
+```
+
+
+9.3.3.4 add_pointの事前条件エラーを検証するメソッド
+```php
+    /**
+     * @test
+     * @dataProvider dataProvider_put_add_point_add_point事前条件エラー
+     */
+    public function put_add_point_add_point事前条件エラー(int $addPoint)
+    {
+        // (1) API実行
+        $response = $this->putJson('/api/customers/add_point', [
+            'customer_id' => self::CUSTOMER_ID,
+            'add_point'   => $addPoint,
+        ]);
+
+        // (2) HTTPレスポンスアサーション
+        $response->assertStatus(400);
+        $expected = [
+            'message' => 'add_point should be equals or greater than 1',
+        ];
+        $response->assertExactJson($expected);
+    }
+
+    public function dataProvider_put_add_point_add_point事前条件エラー()
+    {
+        return [
+            [0],
+            [-1],
+        ];
+    }
+```
+
+<br>
+
+#### customer_idが事前条件とエラーとなるケース
+
+customer_idが存在しないid(999)だった場合に正常なエラーが返るかをテストするメソッド  
+9.3.3.5 customer_idの事前条件エラーを検証するテストメソッド
+```php
+    /**
+     * @test
+     */
+    public function put_add_point_customer_id事前条件エラー()
+    {
+        // (1) API実行
+        $response = $this->putJson('/api/customers/add_point', [
+            'customer_id' => 999,
+            'add_point'   => 10,
+        ]);
+
+        // (2) HTTPレスポンスアサーション
+        $response->assertStatus(400);
+        $expected = [
+            'message' => 'customer_id:999 does not exists',
+        ];
+        $response->assertExactJson($expected);
+    }
+```
+
+最後に該当ファイルのテストを実施してテストが正常に終わる事を確認  
+```
+vagrant@homestead:~/larabook/chapter09$ ./vendor/bin/phpunit tests/Feature/Api/AddPointTest.php
+PHPUnit 6.5.9 by Sebastian Bergmann and contributors.
+
+........                                                            8 / 8 (100%)
+
+Time: 3.15 seconds, Memory: 20.00MB
+
+OK (8 tests, 20 assertions)
+```
+
+無事正常なテストとして完了した   
+
 <br>
 
 ### 9-3-4　WebAPIテストに便利な機能
+
+最後にWebAPIテストに便利な機能の紹介   
+`tests\Feature\Api\MiddlewareTest.php`にテストコードが記載されている   
+
+<br>
+
+#### ミドルウェアの無効化
+
+HTTPリクエスト送信時にルーティング等で設定されているミドルウェアを無効にできる。  
+withoutMiddleware メソッドに無効にしたいミドルウェアクラス名を指定すると実行されなくなる
+
+9.3.4.1 ミドルウェアを無効にする
+```php
+    /**
+     * @test
+     */
+    public function TeaPotMiddlewareを無効()
+    {
+        $response = $this->withoutMiddleware(TeaPotMiddleware::class)
+            ->getJson('/api/live');
+
+        $response->assertStatus(200);
+    }
+```
+
+全ミドルウェアを無効にするには `withoutMiddleware`を引数無しで実行するか
+`use Illuminate\Foundation\Testing\WithoutMiddleware;`を宣言する
+
+9.3.4.2 全ミドルウェアを無効にする
+```php
+    /**
+     * @test
+     */
+    public function 全てのミドルウェアを無効()
+    {
+        $response = $this->withoutMiddleware()
+            ->getJson('/api/live');
+
+        $response->assertStatus(200);
+    }
+```
+
+9.3.4.3 全ミドルウェアを無効にする(WithoutMiddlewareトレイト)
+```php
+<?php
+declare(strict_types=1);
+
+namespace Tests\Feature\Api;
+
+use Illuminate\Foundation\Testing\WithoutMiddleware;
+use Tests\TestCase;
+
+class WithoutMiddlewareTest extends TestCase
+{
+    use WithoutMiddleware;
+
+    /**
+     * @test
+     */
+    public function 全てのミドルウェアを無効()
+    {
+        $response = $this->getJson('/api/live');
+
+        $response->assertStatus(200);
+    }
+}
+```
+
+<br>
+
+#### 認証
+認証が必要なAPIテストには以下の二つの方法がある   
+
+- リクエストヘッダに認証に必要なトークン等を設定
+- WithoutMiddlewareメソッド等で認証ミドルウェアを無効にする
+
+`tests\Feature\Api\AuthTest.php`にサンプルコードがある   
+
+テスト時は通常のリクエストと同様ミドルウェアで認証が実行される   
+
+9.3.3.4 認証トークンを送信する例
+```php
+    /**
+     * @test
+     */
+    public function guard_api()
+    {
+        // 認証ユーザーを事前に生成
+        factory(User::class)->create([
+            'name'      => 'Mike',
+            'api_token' => 'token1'
+        ]);
+
+        // 認証トークンをリクエストヘッダに設定して送信
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer token1'
+        ])->getJson('/api/user');
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'name' => 'Mike',
+        ]);
+    }
+```
+
+9.3.4.5 actingAsメソッドによる認証ユーザー設定例
+```php
+    /**
+     * @test
+     */
+    public function actingAsで認証ユーザ設定()
+    {
+        // 認証ユーザーを事前に生成
+        $user = factory(User::class)->create([
+            'name'      => 'Mike',
+            'api_token' => 'token1'
+        ]);
+
+        // ミドルウェアを無効にして、actingAsメソッドに認証ユーザを設定
+        $response = $this->withoutMiddleware()
+            ->actingAs($user)
+            ->getJson('/api/user');
+
+        $response->assertStatus(200);
+        $response->assertJson([
+            'name' => 'Mike',
+        ]);
+    }
+```
+これだとテストを実行するとコントローラーやアクションでは`Auth::user()`等でユーザーを取得できるらしい   
+
+<br>
+
+#### コンポーネントのモック（Fake）
+
+MailやNotification等が絡んだ機能でそのままテストをしてしまうと、例えばテストでMailが送信されてしまうが、このようなコンポーネントをモックにすれば、ミドルウェアに接続しないでテストが可能となる。ここではMailのモッククラスを紹介する。   
+
+MailのモックはMailファサードのfakeメソッドを利用する。fakeメソッドを利用するとサービスコンテナに登録されているインスタンスがモッククラスに置き換わる   
+
+**注意 :** アサーションメソッドを利用するにはsendメソッドでメールを送信する際に
+`Illuminate\Contracts\Mail\Mailable`インターフェースを実装したクラスを引数に指定する必要がある   
+
+9.3.4.6 MailFakeのアサーションメソッド
+| メソッド | 内容 |
+|:--|:--|
+| assertSent | 指定されたメールが送信された事を検証 |
+| assertNotSent | 指定されたメールが送信されてない事を検証 |
+| assertNottingSent | メールが送信されてない事を検証 |
+| assertQueued | 指定されたメールがメールキューに登録された事を検証 |
+| assertNotQueued | 指定されたメールが送信されてない事を検証 |
+| assertNottingQueued | メールキューに登録されてない事を検証 |
+
+
+9.3.4.7 アサーションメソッドで送信内容が検証できる送信例 (`routes\api.php`)
+```php
+Route::post('/send-email', function (Request $request, Mailer $mailer) {
+    // Mailableインターフェースを実装したクラス
+    $mail = new \App\Mail\Sample();
+    // sendメソッドにMailableインターフェースを実装したクラスを指定
+    $mailer->to($request->get('to'))->send($mail);
+
+    return response()->json('ok');
+});
+```
+
+
+
+9.3.4.8 ファサードのfakeメソッドを利用した例 (`tests\Feature\Api\MailTest.php`抜粋)
+```php
+    /**
+     * @test
+     */
+    public function Mailファサードfakeを利用したテスト()
+    {
+        Mail::fake(); // <--- (1) MailFakeに置き換え
+
+        $response = $this->postJson('/api/send-email-facade', [
+            'to' => 'a@example.com',
+        ]);
+
+        $response->assertStatus(200);
+
+        // (2) MailFakeを利用したアサーション
+        // 第二引数が数値になると、送信された件数を検証する
+        Mail::assertSent(Sample::class, 1);
+        // (3) 送信した$mailableの値を検証
+        // 第二引数をDIにしてメソッドを検証に使える、hasToは有無の検証なのでbool値が返る
+        Mail::assertSent(Sample::class, function (Mailable $mailable) {
+            return $mailable->hasTo('a@example.com');
+        });
+    }
+```
+
+別の方法で、モックを利用せずにメール送信を防ぐ方法もある。logを利用すると送信内容をログファイルに出力する。テスト実行時のみメールドライバを切り替えるには以下の行を追加する。   
+
+9.3.4.9 MAIL_DRIVERをlogに設定 (`phpunit.xml`抜粋)
+```php
+    <php>
+        <env name="APP_ENV" value="testing"/>
+        <env name="CACHE_DRIVER" value="array"/>
+        <env name="SESSION_DRIVER" value="array"/>
+        <env name="QUEUE_DRIVER" value="sync"/>
+        <env name="DB_DATABASE" value="app_test"/>
+        <env name="MAIL_DRIVER" value="log"/> <!-- arrayを logにする -->
+    </php>
+```
+**9章は以上となる**
+
+## まとめ　感想
+
+すげえ疲れた、そもそもテストをするにもそれに至るまで、元のアプリケーション実装を読み込む必要があった、しかし見慣れない書き方満載で、テストに行くまでに調べる事も多く理解するまでが大変だった。しかし理にかなった設計というものを垣間見た気がする。
+おそらく筆者の方もテストの章を通じて、アプリケーションの設計思想を見せたかったのやもしれない。     
+とはいえ、現状なんとかコードを読むことは出来るが、自分で書ける気はまだしない。しかし処理を分離するとテストもし易くなるというメリットはなんとなくつかめた。   
+最初にフレームワークに触れた時も、当時のベタな書き方に対して、こんなの使いこなせる気がしない！と思ったものだが、やはりしばらくすれば慣れてくるのだろう。
+
+この章の資料を作るにあたってコード以外の部分のスキルも身に付いた。
+vagrantの環境追加に始まり開発環境でのsslをchromeでも閲覧可能にする方法の確立にはじまったが、エディタにvscodeを使うようになってツールに助けられた部分も大きい。複数のファイル間の呼び出し元クラスへ簡単に渡り歩けてコードを確認できり、ターミナルでシームレスにコマンドを叩いてテスト動作を確認できたりしたのはメリットだった。また、plantUMLを初めて使ってみて、書籍を同じクラス図等が作れるようになったり、自分のアプリケーションのコードと見比べたりも簡単に出来たので、理解の助けになった気がする。ツールはやはり良いものを使うべきだなぁ。という事を実感。
+そしてこの3記事に渡るMarkdownのテキストも、全てまとめるとここが今2000行目！かなりのボリュームとなった（ソースコードは書籍GitHubのコピペが大半で申し訳ないが...）
+今後は当初の目的であった自分のアプリのテストをゴリゴリ書いてデグレしにくい体制を早く作りたい。   
+
